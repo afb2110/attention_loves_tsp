@@ -52,8 +52,51 @@ class AttentionMechanismVaswani(AttentionMechanism):
         
         compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
         compatibility = compatibility*mask
-        
 
+class AttentionMechanismVelickovic(AttentionMechanism):
+
+    def __init__(self,
+                 n_heads,
+                 input_dim,
+                 key_dim,
+                 value_dim):
+        super(AttentionMechanismVaswani, self).__init__()
+
+        print("WARNING: AttentionMechanismVelickovic is not finished yet. Please use AttentionMechanismVaswani.")
+        breakpoint()
+
+        # TODO finish
+
+        self.n_heads = n_heads
+        self.input_dim = input_dim
+        self.key_dim = key_dim
+        self.value_dim = value_dim
+
+        self.compat_factor = 1 / math.sqrt(key_dim)  # faster than **(-0.5)
+
+        self.W = nn.Parameter(torch.tensor((n_heads, input_dim, key_dim)))
+        self.A = nn.Parameter(torch.tensor((n_heads, key_dim)))
+
+        self.W_V = nn.Parameter(torch.tensor((n_heads, input_dim, value_dim)))
+
+        # Initialization
+        nn.init.xavier_uniform_(self.W)
+        nn.init.xavier_uniform_(self.W_V)
+
+    def forward(self, h, neighbours, mask=None):
+        """
+        h (batch_size, graph_size, input_dim)
+        """
+
+        q = torch.matmul(h, self.W)  # Probably (n_heads, batch_size, graph_size, key_dim)
+        concat = torch.cat((q, torch.matmul(h, self.W)), -1)
+        v = torch.matmul(h, self.W_V)
+
+        #
+        mask = np.clip((0.5 - mask) * np.inf, -np.inf, 1)
+
+        compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
+        compatibility = compatibility * mask
 
 
 class MultiheadAttention(nn.Module):
