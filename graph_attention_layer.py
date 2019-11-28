@@ -24,8 +24,8 @@ class AttentionMechanismVaswani(AttentionMechanism):
         self.n_heads = n_heads
         self.input_dim = input_dim
         self.key_dim = key_dim
-        self.out_dim = key_dim
         self.value_dim = value_dim
+        self.out_dim = value_dim
 
         self.compat_factor = 1 / math.sqrt(key_dim)  # faster than **(-0.5)
 
@@ -74,36 +74,35 @@ class AttentionMechanismVaswani(AttentionMechanism):
 
 
 
-class MultiheadAttention(nn.Module):
-    """docstring for AttentionLayer."""
+class MultiHeadAttention(nn.Module):
+    """docstring for MultiHeadAttention."""
 
     def __init__(self,
                  n_head,
                  input_dim,
-                 message_dim,
                  embed_dim,
                  attention_mechanism,
                  params_attention):
-        super(MultiheadAttention
+        super(MultiHeadAttention
         self.attention_mechanism = self.attention_mechanism(**params_attention)
 
         self.n_head = n_head
         self.input_dim = input_dim
-        self.message_dim = message_dim
         self.embed_dim = embed_dim
 
-        # TODO: find a way to unify self.attention_mecchanism.out_dim, message_dim
         self.W_O = nn.Parameter(torch.tensor((n_head, self.attention_mechanism.out_dim, embed_dim)))
-
+        # TODO: find a way to unify self.attention_mecchanism.out_dim, message_dim
         for param in self.parameters():
             nn.init.xavier_uniform_(param)
     
     def forward(self, h, mask=None):
+        batch_size, graph_size, _ = h.size()
+
         h_p = self.attention_mechanism(h)
 
         out = torch.mm(
-            h_p.permute(1, 2, 0, 3).contiguous().view(-1, self.n_head * self.val_dim),
+            h_p.permute(1, 2, 0, 3).contiguous().view(-1, self.n_head * self.attention_mechanism.out_dim),
             self.W_out.view(-1, self.embed_dim)
-        ).view(batch_size, n_query, self.embed_dim)
+        ).view(batch_size, graph_size, self.embed_dim)
 
         return out
