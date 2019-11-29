@@ -1,8 +1,8 @@
 import torch
-from torch import nn
+from torch import nn, optim
 from graph_attention_layer import AttentionMechanism
 
-class MultiHeadAttentionLayer(nn.Module):
+class AttentionModel(nn.Module):
     pass
 
 
@@ -48,9 +48,48 @@ class Encoder(nn.Module):
         return h, h_graph
 
 
-def new_attention_mechanism(node):  # TODO Details of attention mechanism
-    return node
 
+if __name__ == "__main__":
+    opts = get_options()
+
+    # Set the random seed
+    torch.manual_seed(0)
+
+    # Initialize model
+    model = AttentionModel(
+            opts.embedding_dim,
+            opts.hidden_dim,
+            opts.problem,
+            n_encode_layers=opts.n_encode_layers,
+            mask_inner=True,
+            mask_logits=True,
+            normalization=opts.normalization
+        )
+
+    # Overwrite model parameters by parameters to load
+    model.load_state_dict({**model.state_dict(), **load_data.get('model', {})})
+
+    # Initialize baseline
+    baseline = opts.baseline  # TODO implement greedy baseline
+
+    # Initialize optimizer
+    optimizer = optim.Adam([{'params': model.parameters(), 'lr': float(opts.lr)}])
+    )
+
+    # Start the actual training loop
+    val_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.val_size)
+
+    for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
+        train_epoch(
+            model,
+            optimizer,
+            baseline,
+            lr_scheduler,
+            epoch,
+            val_dataset,
+            problem,
+            opts
+        )
 
 class Decoder(nn.Module):
     def __init__(self, embedded_graph, initial_node, final_node,
