@@ -13,6 +13,7 @@ class AttentionMechanism(nn.Module):
 
 
 class AttentionMechanismVaswani(AttentionMechanism):
+    # TODO: will be improved later
 
     def __init__(self,
                  n_heads,

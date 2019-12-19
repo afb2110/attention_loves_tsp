@@ -1,6 +1,19 @@
+#!/usr/bin/env python
+
+import os
+import json
+import pprint as pp
+
 import torch
 from torch import nn, optim
-from graph_attention_layer import AttentionMechanism
+
+from options import get_options
+from baselines import NoBaseline
+from tsp import TSP as problem
+from train import train_epoch, validate
+from graph_attention_layer import AttentionMechanism, AttentionMechanismVaswani, AttentionMechanismVelickovic
+
+from utils import log_values, maybe_cuda_model
 
 class AttentionModel(nn.Module):
     pass
@@ -48,7 +61,6 @@ class Encoder(nn.Module):
         return h, h_graph
 
 
-
 if __name__ == "__main__":
     opts = get_options()
 
@@ -56,7 +68,7 @@ if __name__ == "__main__":
     torch.manual_seed(0)
 
     # Initialize model
-    model = AttentionModel(
+    model = maybe_cuda_model(AttentionModel(
             opts.embedding_dim,
             opts.hidden_dim,
             opts.problem,
@@ -64,32 +76,41 @@ if __name__ == "__main__":
             mask_inner=True,
             mask_logits=True,
             normalization=opts.normalization
-        )
+        ),
+        opts.use_cuda
+    )
 
     # Overwrite model parameters by parameters to load
     model.load_state_dict({**model.state_dict(), **load_data.get('model', {})})
 
     # Initialize baseline
-    baseline = opts.baseline  # TODO implement greedy baseline
+    baseline = opts.baseline
+    if baseline.isNone():
+        baseline = NoBaseline()
 
     # Initialize optimizer
-    optimizer = optim.Adam([{'params': model.parameters(), 'lr': float(opts.lr)}])
-    )
+    optimizer = optim.Adam([{'params': model.parameters(), 'lr': float(opts.lr)}])  # TODO: add parameters
+
+    # Initialize learning rate scheduler, decay by lr_decay once per epoch!
+    lr_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: opts.lr_decay ** epoch)
 
     # Start the actual training loop
     val_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.val_size)
 
-    for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
-        train_epoch(
-            model,
-            optimizer,
-            baseline,
-            lr_scheduler,
-            epoch,
-            val_dataset,
-            problem,
-            opts
-        )
+    if opts.eval_only:
+        validate(model, val_dataset, opts)
+    else:
+        for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
+            train_epoch(
+                model,
+                optimizer,
+                baseline,
+                lr_scheduler,
+                epoch,
+                val_dataset,
+                problem,
+                opts
+            )
 
 class Decoder(nn.Module):
     def __init__(self, embedded_graph, initial_node, final_node,
