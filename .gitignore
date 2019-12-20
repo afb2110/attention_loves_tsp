@@ -110,3 +110,6 @@ venv.bak/
 *.xml
 attention_loves_tsp.iml
 .idea*
+
+# Pylint
+.pylintrc
