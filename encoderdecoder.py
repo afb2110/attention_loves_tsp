@@ -18,8 +18,63 @@ from graph_attention_layer import AttentionLayer
 
 from utils import log_values, maybe_cuda_model
 
+
 class AttentionModel(nn.Module):
-    pass
+    def __init__(self,
+                 embedding_dim,
+                 hidden_dim,
+                 problem,
+                 decode_type="greedy",  # TODO change to sampling later
+                 n_encode_layers=2,
+                 tanh_clipping=10.,
+                 mask_inner=True,
+                 mask_logits=True,
+                 normalization='batch',
+                 n_heads=8):
+        super(AttentionModel, self).__init__()
+
+
+        # self.mask_inner = mask_inner
+        # self.mask_logits = mask_logits
+        # self.hidden_dim = hidden_dim
+        # self.n_encode_layers = n_encode_layers
+        self.decode_type = decode_type
+        # self.temp = 1.0  # If we add a temperature one day
+
+        self.problem = problem
+
+        self.embedder = Encoder(
+            n_heads=n_heads,
+            embed_dim=embedding_dim,
+            n_layers=self.n_encode_layers,
+            node_dim=self.problem.NODE_DIM,
+            normalization=normalization
+        )
+
+        key_dim = embedding_dim // n_heads
+
+        self.decoder = Decoder(
+            n_heads=n_heads,
+            embed_dim=embedding_dim,
+            key_dim=key_dim,
+            tanh_clipping=tanh_clipping
+        )
+
+
+    def forward(self, input, eval_seq=None):
+        """
+        :param input: (batch_size, graph_size, node_dim) input node features
+        :param eval_seq: (batch_size, graph_size) sequence to score (supervised) or None for autoregressive
+        :return:
+        """
+
+        embeddings, h_graph = self.embedder(input)
+
+        log_p, pi = self.decoder(embeddings, h_graph, eval_seq)
+
+        cost, mask = self.problem.get_costs(input, pi)
+
+        return cost, log_p, pi, mask
 
 
 class Encoder(nn.Module):
@@ -72,6 +127,12 @@ if __name__ == "__main__":
     # Set the random seed
     torch.manual_seed(0)
 
+    # Load data from load_path
+    load_data = {}
+    if opts.load_path is not None:
+        print('  [*] Loading data from {}'.format(opts.load_path))
+        load_data = torch.load(opts.load_path, map_location=lambda storage, loc: storage)  # Load on CPU
+
     # Initialize model
     model = maybe_cuda_model(AttentionModel(
             opts.embedding_dim,
@@ -84,6 +145,7 @@ if __name__ == "__main__":
         ),
         opts.use_cuda
     )
+
 
     # Overwrite model parameters by parameters to load
     model.load_state_dict({**model.state_dict(), **load_data.get('model', {})})
@@ -145,7 +207,7 @@ class Decoder(nn.Module):
         init_function(self.W_K)
 
 
-    def forward(self, h, h_graph):
+    def forward(self, h, h_graph, eval_seq):
 
 
         batch_size, graph_size, input_dim = h.size()
@@ -168,6 +230,7 @@ class Decoder(nn.Module):
             q_nodes = torch.matmul(h_nodes, self.W_Q_nodes)
             # k : (batch_size, n_heads, graph_size, key_dim
             k = torch.matmul(h, self.W_K)
+            q = q_graph + q_nodes
 
             # compatibility : (batch_size, n_heads, graph_size, graph_size)
             compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
@@ -187,7 +250,7 @@ class Decoder(nn.Module):
             attention[:, :, idx_x, idx_y] = 0
 
             # Select the indices of the next nodes in the sequences (or evaluate eval_seq), result (batch_size) long
-            selected = self._select_node(log_probs, visited) if eval_seq is None else eval_seq[:, i]
+            selected = self._select_node(log_probs, visited) if eval_seq is None else eval_seq[:, time_step]
 
             log_probs.append(attention.log())
             sequences.append(selected)
@@ -196,7 +259,7 @@ class Decoder(nn.Module):
             visited = visited.clone().scatter_(1, selected.unsqueeze(-1), True)
 
         # Collected lists, return Tensor
-        return torch.stack(outputs, 1), torch.stack(sequences, 1)
+        return torch.stack(log_probs, 1), torch.stack(sequences, 1)
 
 
 
