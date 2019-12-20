@@ -94,43 +94,6 @@ class AttentionMechanismVaswani(AttentionMechanism):
         return h_p
 
 
-'''class MultiHeadAttention(nn.Module):
-    """docstring for MultiHeadAttention."""
-
-    def __init__(self,
-                 n_head,
-                 input_dim,
-                 embed_dim,
-                 attention_mechanism,
-                 params_attention):
-        super(MultiHeadAttention, self).__init__()
-        self.attention_mechanism = attention_mechanism(**params_attention)
-
-        self.n_head = n_head
-        self.input_dim = input_dim
-        self.embed_dim = embed_dim
-
-        self.W_O = nn.Parameter(torch.tensor((
-            n_head,
-            self.attention_mechanism.out_dim,
-            embed_dim
-            )))
-        # TODO: find a way to unify self.attention_mecchanism.out_dim, message_dim
-        for param in self.parameters():
-            nn.init.xavier_uniform_(param)
-
-    def forward(self, h, mask=None):
-        batch_size, graph_size, _ = h.size()
-
-        h_p = self.attention_mechanism(h)
-
-        out = torch.mm(
-            h_p.permute(1, 2, 0, 3).contiguous().view(-1, self.n_head * self.attention_mechanism.out_dim),
-            self.W_out.view(-1, self.embed_dim)
-        ).view(batch_size, graph_size, self.embed_dim)
-
-        return out'''
-
 class AttentionMechanismVelickovic(AttentionMechanism):
 
     def __init__(self,
