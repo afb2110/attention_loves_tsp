@@ -105,3 +105,8 @@ venv.bak/
 
 # VSCode
 .vscode/
+
+# Others
+*.xml
+attention_loves_tsp.iml
+.idea*
