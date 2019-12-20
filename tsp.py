@@ -11,7 +11,7 @@ class TSP(object):
     NODE_DIM = 2
 
     @staticmethod
-    def get_costs(dataset, pi):
+    def get_costs(dataset, pi, log_p=False):
         """
         :param dataset: (batch_size, graph_size, 2) coordinates
         :param pi: (batch_size, graph_size) permutations representing tours
@@ -29,6 +29,7 @@ class TSP(object):
 
         # Length is distance (L2-norm of difference) from each next location from its prev and of last from first
         return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1), None
+        # return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1)
 
     @staticmethod
     def make_dataset(*args, **kwargs):

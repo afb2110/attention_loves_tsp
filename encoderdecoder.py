@@ -15,6 +15,7 @@ from baselines import NoBaseline
 from tsp import TSP as problem
 from train import train_epoch, validate
 from graph_attention_layer import AttentionLayer
+from torch.autograd import Variable
 
 from utils import log_values, maybe_cuda_model
 
@@ -46,8 +47,8 @@ class AttentionModel(nn.Module):
         self.embedder = Encoder(
             n_heads=n_heads,
             embed_dim=embedding_dim,
-            n_layers=self.n_encode_layers,
-            node_dim=self.problem.NODE_DIM,
+            n_layers=n_encode_layers,
+            node_dim=problem.NODE_DIM,
             normalization=normalization
         )
 
@@ -57,9 +58,14 @@ class AttentionModel(nn.Module):
             n_heads=n_heads,
             embed_dim=embedding_dim,
             key_dim=key_dim,
-            tanh_clipping=tanh_clipping
+            tanh_clipping=tanh_clipping,
+            decode_type=decode_type
         )
 
+    def set_decode_type(self, decode_type, temp=None):
+        self.decode_type = decode_type
+        if temp is not None:  # Do not change temperature if not provided
+            self.temp = temp
 
     def forward(self, input, eval_seq=None):
         """
@@ -72,7 +78,7 @@ class AttentionModel(nn.Module):
 
         log_p, pi = self.decoder(embeddings, h_graph, eval_seq)
 
-        cost, mask = self.problem.get_costs(input, pi)
+        cost, mask = self.problem.get_costs(input, pi, log_p)
 
         return cost, log_p, pi, mask
 
@@ -87,6 +93,7 @@ class Encoder(nn.Module):
             node_dim=None,
             normalization='batch',
             feed_forward_hidden=512):
+        super(Encoder, self).__init__()
 
         self.d_x = node_dim  # Initial size of each node
         self.N = n_layers  # Number of MHA+FF layers
@@ -121,70 +128,14 @@ class Encoder(nn.Module):
         return h, h_graph
 
 
-if __name__ == "__main__":
-    opts = get_options()
-
-    # Set the random seed
-    torch.manual_seed(0)
-
-    # Load data from load_path
-    load_data = {}
-    if opts.load_path is not None:
-        print('  [*] Loading data from {}'.format(opts.load_path))
-        load_data = torch.load(opts.load_path, map_location=lambda storage, loc: storage)  # Load on CPU
-
-    # Initialize model
-    model = maybe_cuda_model(AttentionModel(
-            opts.embedding_dim,
-            opts.hidden_dim,
-            opts.problem,
-            n_encode_layers=opts.n_encode_layers,
-            mask_inner=True,
-            mask_logits=True,
-            normalization=opts.normalization
-        ),
-        opts.use_cuda
-    )
-
-
-    # Overwrite model parameters by parameters to load
-    model.load_state_dict({**model.state_dict(), **load_data.get('model', {})})
-
-    # Initialize baseline
-    baseline = opts.baseline
-    if baseline.isNone():
-        baseline = NoBaseline()
-
-    # Initialize optimizer
-    optimizer = optim.Adam([{'params': model.parameters(), 'lr': float(opts.lr)}])  # TODO: add parameters
-
-    # Initialize learning rate scheduler, decay by lr_decay once per epoch!
-    lr_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: opts.lr_decay ** epoch)
-
-    # Start the actual training loop
-    val_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.val_size)
-
-    if opts.eval_only:
-        validate(model, val_dataset, opts)
-    else:
-        for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
-            train_epoch(
-                model,
-                optimizer,
-                baseline,
-                lr_scheduler,
-                epoch,
-                val_dataset,
-                problem,
-                opts
-            )
-
 class Decoder(nn.Module):
     def __init__(self,
             n_heads,
             embed_dim,
             key_dim,
-            tanh_clipping=10):
+            tanh_clipping=10,
+            decode_type="greedy"):
+        super(Decoder, self).__init__()
 
         # Primitive attributes
         self.n_heads = n_heads
@@ -193,6 +144,7 @@ class Decoder(nn.Module):
         # Mechanism-dependent attributes
         self.key_dim = key_dim
         self.tanh_clipping = tanh_clipping
+        self.decode_type = decode_type
 
         self.compat_factor = 1 / math.sqrt(key_dim)  # faster than **(-0.5)
 
@@ -200,57 +152,64 @@ class Decoder(nn.Module):
         self.W_Q_nodes = nn.Parameter(torch.randn((n_heads, 2 * embed_dim, key_dim)))
         self.W_K = nn.Parameter(torch.randn((n_heads, embed_dim, key_dim)))
 
+        # Create the placeholder for the first graph embedding
+        std = 1. / math.sqrt(embed_dim)
+        self.W_placeholder = nn.Parameter(torch.Tensor(2 * embed_dim))
+        self.W_placeholder.data.uniform_(-std, std)
 
     def initialize_params(self, init_function):
         """Initialization."""
         init_function(self.W_Q)
         init_function(self.W_K)
 
-
     def forward(self, h, h_graph, eval_seq):
-
 
         batch_size, graph_size, input_dim = h.size()
         h = h.view(batch_size, 1, graph_size, input_dim)
 
+        h_graph = h_graph.view(batch_size, 1, 1, input_dim)
         # q_graph : (batch_size, n_heads, graph_size, key_dim)
-        q_graph = torch.matmul(h_graph, self.W_Q_graph)  # Can be calculated outside the loop because constant graph embedding
+        # Can be calculated outside the loop because constant graph embedding
+        q_graph = torch.matmul(h_graph, self.W_Q_graph)
+        n_heads = q_graph.size()[1]
 
         log_probs = []
         sequences = []
         # 0 --> 1 & 1 --> -inf
-        visited = np.zeros(graph_size)
+        visited = Variable(h.data.new().byte().new(batch_size, n_heads, graph_size).zero_())  # TOCHECK what does that mean
 
         for time_step in range(graph_size):
 
             # Computing compatibilities
 
-            h_nodes = self._get_context_nodes(self, h, sequences)
+            h_nodes = self._get_context_nodes(h, sequences)
             # q_nodes : (batch_size, n_heads, graph_size, key_dim)
+            h_nodes = h_nodes.view(-1, 1, 1, 2 * input_dim)
             q_nodes = torch.matmul(h_nodes, self.W_Q_nodes)
             # k : (batch_size, n_heads, graph_size, key_dim
             k = torch.matmul(h, self.W_K)
             q = q_graph + q_nodes
 
-            # compatibility : (batch_size, n_heads, graph_size, graph_size)
+            # compatibility : (batch_size, n_heads, graph_size)
             compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
+            compatibility = compatibility.squeeze()
 
             # From the logits compute the probabilities by clipping
             if self.tanh_clipping > 0:
                 compatibility = F.tanh(compatibility) * self.tanh_clipping
 
-            mask_temp = np.clip((0.5 - visited)*np.inf, -np.inf, 1)  # TOCHECK -- there may be a better implementation since we make the mask ourselves
-            mask_temp = torch.from_numpy(mask_temp)
-            compatibility = compatibility * mask_temp
+            # mask_temp = np.clip((0.5 - visited)*np.inf, -np.inf, 1)  # TOCHECK -- there may be a better implementation since we make the mask ourselves
+            # mask_temp = torch.from_numpy(mask_temp)
+            # compatibility = compatibility * mask_temp
+            compatibility[visited] = -math.inf
 
-            # attention : (batch_size, n_heads, graph_size, graph_size)
+            # attention : (batch_size, n_heads, graph_size)
             attention = F.softmax(compatibility, dim=-1)  # TODO maybe one day we can add a temperature
 
-            idx_x, idx_y = np.where(visited != 1)  # TOCHECK - not needed normally
-            attention[:, :, idx_x, idx_y] = 0
+            attention[visited] = 0
 
             # Select the indices of the next nodes in the sequences (or evaluate eval_seq), result (batch_size) long
-            selected = self._select_node(log_probs, visited) if eval_seq is None else eval_seq[:, time_step]
+            selected = self._select_node(attention, visited[:, 0, :]) if eval_seq is None else eval_seq[:, time_step]
 
             log_probs.append(attention.log())
             sequences.append(selected)
@@ -261,13 +220,11 @@ class Decoder(nn.Module):
         # Collected lists, return Tensor
         return torch.stack(log_probs, 1), torch.stack(sequences, 1)
 
-
-
     def _select_node(self, log_probs, mask):
 
         if self.decode_type == "greedy":
             _, selected = log_probs.max(1)
-            assert not mask.gather(1, selected.unsqueeze(
+            assert mask.gather(1, selected.unsqueeze(
                 -1)).data.any(), "Decode greedy: infeasible action has maximum probability"
 
         # elif self.decode_type == "sampling":  # TODO for later
@@ -282,7 +239,6 @@ class Decoder(nn.Module):
         else:
             assert False, "Unknown decode type"
         return selected
-
 
     def _get_context_nodes(self, embeddings, sequences):
         """

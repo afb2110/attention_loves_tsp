@@ -1,5 +1,6 @@
 from tensorboard_logger import log_value
 from torch.nn import DataParallel
+import torch
 
 
 def log_values(cost, grad_norms, epoch, batch_id, step,
