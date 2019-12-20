@@ -94,7 +94,7 @@ class AttentionMechanismVaswani(AttentionMechanism):
         return h_p
 
 
-"""class MultiHeadAttention(nn.Module):
+'''class MultiHeadAttention(nn.Module):
     """docstring for MultiHeadAttention."""
 
     def __init__(self,
@@ -129,7 +129,7 @@ class AttentionMechanismVaswani(AttentionMechanism):
             self.W_out.view(-1, self.embed_dim)
         ).view(batch_size, graph_size, self.embed_dim)
 
-        return out"""
+        return out'''
 
 class AttentionMechanismVelickovic(AttentionMechanism):
 
@@ -240,3 +240,79 @@ graph_size = 7
 AMV = AttentionMechanismVaswani(n_heads, input_dim, key_dim, value_dim)
 h = torch.zeros(batch_size, graph_size, input_dim)
 y = AMV(h) """
+
+
+class SkipConnection(nn.Module):
+
+    def __init__(self, module):
+        super(SkipConnection, self).__init__()
+        self.module = module
+
+    def forward(self, input):
+        return input + self.module(input)
+
+
+class Normalization(nn.Module):
+
+    def __init__(self, embed_dim, normalization='batch'):
+        super(Normalization, self).__init__()
+
+        normalizer_class = {
+            'batch': nn.BatchNorm1d,
+            'instance': nn.InstanceNorm1d
+        }.get(normalization, None)
+
+        self.normalizer = normalizer_class(embed_dim, affine=True)
+
+        # Normalization by default initializes affine parameters with bias 0 and weight unif(0,1) which is too large!
+        # self.init_parameters()
+
+    def init_parameters(self):
+
+        for name, param in self.named_parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+    def forward(self, input):
+
+        if isinstance(self.normalizer, nn.BatchNorm1d):
+            return self.normalizer(input.view(-1, input.size(-1))).view(*input.size())
+        elif isinstance(self.normalizer, nn.InstanceNorm1d):
+            return self.normalizer(input.permute(0, 2, 1)).permute(0, 2, 1)
+        else:
+            assert self.normalizer is None, "Unknown normalizer type"
+            return input
+
+
+class AttentionLayer(nn.Sequential):
+
+    def __init__(
+            self,
+            n_heads,
+            embed_dim,
+            feed_forward_hidden=512,
+            normalization='batch',
+    ):
+        super(AttentionLayer, self).__init__(
+            SkipConnection(
+                MultiHeadAttention(
+                    n_heads,
+                    input_dim=embed_dim,
+                    embed_dim=embed_dim,
+                    attention_mechanism=AttentionMechanismVaswani,
+                    params_attention={'n_heads': n_heads,
+                                      'input_dim': embed_dim,
+                                      'key_dim': embed_dim // n_heads,
+                                      'value_dim': embed_dim // n_heads}
+                )
+            ),
+            Normalization(embed_dim, normalization),
+            SkipConnection(
+                nn.Sequential(
+                    nn.Linear(embed_dim, feed_forward_hidden),
+                    nn.ReLU(),
+                    nn.Linear(feed_forward_hidden, embed_dim)
+                ) if feed_forward_hidden > 0 else nn.Linear(embed_dim, embed_dim)
+            ),
+            Normalization(embed_dim, normalization)
+        )
