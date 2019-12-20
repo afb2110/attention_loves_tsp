@@ -95,7 +95,7 @@ class AttentionMechanismVaswani(AttentionMechanism):
 
 
 """class MultiHeadAttention(nn.Module):
-    """docstring for MultiHeadAttention."""
+    # docstring for MultiHeadAttention.
 
     def __init__(self,
                  n_head,

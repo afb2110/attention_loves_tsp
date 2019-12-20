@@ -49,8 +49,10 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask=None):
 
+        assert mask is None, "TODO mask not yet supported!"
+
         # Creating the first embedding h from the data x
-        h = self.first_embed(x)
+        h = self.first_embed(x)  # TOCHECK We may need to change the dimention here
 
         # Going through the N (MHA+FF) layers. We have the final node embeddings.
         h = self.layers(h)
