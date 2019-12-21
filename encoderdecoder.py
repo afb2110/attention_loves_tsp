@@ -148,9 +148,9 @@ class Decoder(nn.Module):
 
         self.compat_factor = 1 / math.sqrt(key_dim)  # faster than **(-0.5)
 
-        self.W_Q_graph = nn.Parameter(torch.randn((n_heads, embed_dim, key_dim)))
-        self.W_Q_nodes = nn.Parameter(torch.randn((n_heads, 2 * embed_dim, key_dim)))
-        self.W_K = nn.Parameter(torch.randn((n_heads, embed_dim, key_dim)))
+        self.W_Q_graph = nn.Parameter(torch.randn((embed_dim, key_dim)))
+        self.W_Q_nodes = nn.Parameter(torch.randn((2 * embed_dim, key_dim)))
+        self.W_K = nn.Parameter(torch.randn((embed_dim, key_dim)))
 
         # Create the placeholder for the first graph embedding
         std = 1. / math.sqrt(embed_dim)
@@ -167,31 +167,31 @@ class Decoder(nn.Module):
         batch_size, graph_size, input_dim = h.size()
         h = h.view(batch_size, 1, graph_size, input_dim)
 
-        h_graph = h_graph.view(batch_size, 1, 1, input_dim)
-        # q_graph : (batch_size, n_heads, graph_size, key_dim)
+        h_graph = h_graph.view(batch_size, 1, input_dim)
+        # q_graph : (batch_size, graph_size, key_dim)
         # Can be calculated outside the loop because constant graph embedding
         q_graph = torch.matmul(h_graph, self.W_Q_graph)
-        n_heads = q_graph.size()[1]
 
         log_probs = []
         sequences = []
         # 0 --> 1 & 1 --> -inf
-        visited = Variable(h.data.new().byte().new(batch_size, n_heads, graph_size).zero_())  # TOCHECK what does that mean
+        visited = Variable(h.data.new().byte().new(batch_size, graph_size).zero_())  # TOCHECK what does that mean
 
         for time_step in range(graph_size):
 
             # Computing compatibilities
 
             h_nodes = self._get_context_nodes(h, sequences)
-            # q_nodes : (batch_size, n_heads, graph_size, key_dim)
-            h_nodes = h_nodes.view(-1, 1, 1, 2 * input_dim)
+            # q_nodes : (batch_size, graph_size, key_dim)
+            h_nodes = h_nodes.view(-1, 1, 2 * input_dim)
             q_nodes = torch.matmul(h_nodes, self.W_Q_nodes)
-            # k : (batch_size, n_heads, graph_size, key_dim
+            # k : (batch_size, graph_size, key_dim
             k = torch.matmul(h, self.W_K)
+            k = k.squeeze()
             q = q_graph + q_nodes
 
-            # compatibility : (batch_size, n_heads, graph_size)
-            compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
+            # compatibility : (batch_size, graph_size)
+            compatibility = self.compat_factor * torch.matmul(q, k.transpose(1, 2))
             compatibility = compatibility.squeeze()
 
             # From the logits compute the probabilities by clipping
@@ -209,7 +209,7 @@ class Decoder(nn.Module):
             attention[visited] = 0
 
             # Select the indices of the next nodes in the sequences (or evaluate eval_seq), result (batch_size) long
-            selected = self._select_node(attention, visited[:, 0, :]) if eval_seq is None else eval_seq[:, time_step]
+            selected = self._select_node(attention, visited) if eval_seq is None else eval_seq[:, time_step]
 
             log_probs.append(attention.log())
             sequences.append(selected)
@@ -224,7 +224,7 @@ class Decoder(nn.Module):
 
         if self.decode_type == "greedy":
             _, selected = log_probs.max(1)
-            assert mask.gather(1, selected.unsqueeze(
+            assert not mask.gather(1, selected.unsqueeze(
                 -1)).data.any(), "Decode greedy: infeasible action has maximum probability"
 
         # elif self.decode_type == "sampling":  # TODO for later
@@ -252,6 +252,8 @@ class Decoder(nn.Module):
             return self.W_placeholder.unsqueeze(0)
         else:
             batch_size = embeddings.size(0)
+            embeddings = embeddings.squeeze()
+            print(embeddings.size())
             # Return first and last node embeddings
             return torch.gather(
                 embeddings,
@@ -261,3 +263,4 @@ class Decoder(nn.Module):
                 .view(batch_size, 2, 1)
                 .expand(batch_size, 2, embeddings.size(-1))
             ).view(batch_size, -1)  # View to have (batch_size, 2 * embed_dim)
+            # return torch.gather(embeddings, 1, torch.stack((sequences[0], sequences[-1]), dim=1)).view(batch_size, -1)
