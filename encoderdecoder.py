@@ -175,7 +175,9 @@ class Decoder(nn.Module):
         log_probs = []
         sequences = []
         # 0 --> 1 & 1 --> -inf
-        visited = Variable(h.data.new().byte().new(batch_size, graph_size).zero_())  # TOCHECK what does that mean
+        # visited = Variable(h.data.new().byte().new(batch_size, graph_size).zero_())  # TOCHECK what does that mean
+        visited = torch.zeros((batch_size, graph_size))
+        visited = visited.type(torch.bool)
 
         for time_step in range(graph_size):
 
@@ -196,22 +198,18 @@ class Decoder(nn.Module):
 
             # From the logits compute the probabilities by clipping
             if self.tanh_clipping > 0:
-                compatibility = F.tanh(compatibility) * self.tanh_clipping
+                compatibility = torch.tanh(compatibility) * self.tanh_clipping
 
-            # mask_temp = np.clip((0.5 - visited)*np.inf, -np.inf, 1)  # TOCHECK -- there may be a better implementation since we make the mask ourselves
-            # mask_temp = torch.from_numpy(mask_temp)
-            # compatibility = compatibility * mask_temp
-            compatibility[visited] = -math.inf
+            compatibility[visited] = -math.inf  # or np.inf
 
             # attention : (batch_size, n_heads, graph_size)
-            attention = F.softmax(compatibility, dim=-1)  # TODO maybe one day we can add a temperature
-
-            attention[visited] = 0
+            log_attention = F.log_softmax(compatibility, dim=-1)  # TODO maybe one day we can add a temperature
+            attention = log_attention.exp()
 
             # Select the indices of the next nodes in the sequences (or evaluate eval_seq), result (batch_size) long
             selected = self._select_node(attention, visited) if eval_seq is None else eval_seq[:, time_step]
 
-            log_probs.append(attention.log())
+            log_probs.append(log_attention)
             sequences.append(selected)
 
             #  Updating mask
@@ -253,7 +251,6 @@ class Decoder(nn.Module):
         else:
             batch_size = embeddings.size(0)
             embeddings = embeddings.squeeze()
-            print(embeddings.size())
             # Return first and last node embeddings
             return torch.gather(
                 embeddings,

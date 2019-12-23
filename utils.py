@@ -8,7 +8,8 @@ def log_values(cost, grad_norms, epoch, batch_id, step,
     """
     Print values on the screen and log values to tensorboard.
     """
-    avg_cost = cost.mean().data[0]
+    avg_cost = cost.mean().item()
+    print(avg_cost)
     grad_norms, grad_norms_clipped = grad_norms
 
     # Log values to screen
@@ -22,14 +23,14 @@ def log_values(cost, grad_norms, epoch, batch_id, step,
     if not opts.no_tensorboard:
         log_value('avg_cost', avg_cost, step)
 
-        log_value('actor_loss', reinforce_loss.data[0], step)
-        log_value('nll', -log_likelihood.mean().data[0], step)
+        log_value('actor_loss', reinforce_loss.item(), step)
+        log_value('nll', -log_likelihood.mean().item(), step)
 
         log_value('grad_norm', grad_norms[0], step)
         log_value('grad_norm_clipped', grad_norms_clipped[0], step)
 
         if opts.baseline == 'critic':
-            log_value('critic_loss', bl_loss.data[0], step)
+            log_value('critic_loss', bl_loss.item(), step)
             log_value('critic_grad_norm', grad_norms[1], step)
             log_value('critic_grad_norm_clipped', grad_norms_clipped[1], step)
 

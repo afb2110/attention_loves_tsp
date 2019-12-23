@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import os
+import pprint as pp
+import json
 from tensorboard_logger import configure
 
 import torch
@@ -18,12 +20,20 @@ from utils import log_values, maybe_cuda_model
 if __name__ == "__main__":
     opts = get_options()
 
+    # Pretty print the run args
+    pp.pprint(vars(opts))
+
     # Set the random seed
     torch.manual_seed(0)
 
     # Optionally configure tensorboard
     if not opts.no_tensorboard:
         configure(os.path.join(opts.log_dir, "{}_{}".format(problem.NAME, opts.graph_size), opts.run_name))
+
+    os.makedirs(opts.save_dir)
+    # Save arguments so exact configuration can always be found
+    with open(os.path.join(opts.save_dir, "args.json"), 'w') as f:
+        json.dump(vars(opts), f, indent=True)
 
     # Load data from load_path
     load_data = {}
