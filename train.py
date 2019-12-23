@@ -79,9 +79,9 @@ def clip_grad_norms(param_groups, max_norm=math.inf):
 
 def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, opts):
     print("Start train epoch {}, lr={} for run {}".format(epoch, optimizer.param_groups[0]['lr'], opts.run_name))
+    torch.autograd.set_detect_anomaly(True)  # TODO uncomment when no more debugging
     step = epoch * (opts.epoch_size // opts.batch_size)
     start_time = time.time()
-    lr_scheduler.step(epoch)
 
     if not opts.no_tensorboard:
         log_value('learnrate_pg0', optimizer.param_groups[0]['lr'], step)
@@ -109,6 +109,7 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
 
         step += 1
 
+    lr_scheduler.step(epoch)
     epoch_duration = time.time() - start_time
     print("Finished epoch {}, took {} s".format(epoch, time.strftime('%H:%M:%S', time.gmtime(epoch_duration))))
 
@@ -152,6 +153,7 @@ def train_batch(
 
     # Evaluate baseline, get baseline loss if any (only for critic)
     bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
+    # bl_val, bl_loss = 0, 0
 
     # Get log_p corresponding to selected actions
     log_p = _log_p.gather(2, pi.unsqueeze(-1)).squeeze(-1)
@@ -166,6 +168,7 @@ def train_batch(
     log_likelihood = log_p.sum(1)
     reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
     loss = reinforce_loss + bl_loss
+    # loss = reinforce_loss
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
