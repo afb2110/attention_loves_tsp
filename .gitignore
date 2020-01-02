@@ -109,7 +109,12 @@ venv.bak/
 # Others
 *.xml
 attention_loves_tsp.iml
+.idea/
 .idea*
 
 # Pylint
 .pylintrc
+
+# Logs and outputs of training
+logs/
+outputs/
