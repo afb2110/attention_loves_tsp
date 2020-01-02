@@ -91,7 +91,7 @@ class TSP_greedy(TSP):
                 pi.data.sort(1)[0]
         ).all(), "Invalid tour"
 
-        loss = (pi*log_p).sum(dim=2).sum(dim=1)
+        loss = -(pi*log_p).sum(dim=2).sum(dim=1)
         
         return loss
 
