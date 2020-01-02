@@ -43,7 +43,7 @@ class TSP_greedy(TSP):
         M = dist.max()
         dist = dist + M * torch.eye(graph_size)
         
-        tour = torch.zeros((batch_size, graph_size))
+        tour = torch.zeros((batch_size, graph_size)).int()
         tour[:, 0] = pi_0
         current_node = pi_0
         
@@ -62,15 +62,29 @@ class TSP_greedy(TSP):
                 tour.data.sort(1)[0]
         ).all(), "Invalid tour"
 
+        self.tour = tour
+
+        self.one_hot_solution()
+
         return tour
+
+    @staticmethod
+    def one_hot_solution():#self):
+        batch_size, graph_size = self.tour.size()
+        tour_one_hot = torch.zeros((batch_size, graph_size, graph_size))
+        for i in range(batch_size):
+            tour_one_hot[i, torch.arange(graph_size), self.tour[i]] = 1
+        #self.tour_one_hot = tour_one_hot
+
+        return tour_one_hot
 
 
     @staticmethod
-    def get_costs(dataset, pi, log_p):
+    def get_costs(pi, log_p):
         """
         :param dataset: (batch_size, graph_size, 2) coordinates
-        :param pi: (batch_size, graph_size) permutations representing tours
-        :return: (batch_size) lengths of tours
+        :param pi: (batch_size, graph_size, graph_size) one-hot encoded permutations representing tours
+        :return: (batch_size) cross-entropy of greedy solution
         """
 
         # Check that tours are valid, i.e. contain 0 to n -1
@@ -79,11 +93,9 @@ class TSP_greedy(TSP):
                 pi.data.sort(1)[0]
         ).all(), "Invalid tour"
 
-        # Gather dataset in order of tour
-        d = dataset.gather(1, pi.unsqueeze(-1).expand_as(dataset))
-
-        # Length is distance (L2-norm of difference) from each next location from its prev and of last from first
-        return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1), None
+        loss = (pi*log_p).sum(dim=2).sum(dim=1)
+        
+        return loss
 
 
 class TSPDataset(Dataset):
