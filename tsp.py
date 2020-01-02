@@ -29,11 +29,61 @@ class TSP(object):
 
         # Length is distance (L2-norm of difference) from each next location from its prev and of last from first
         return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1), None
-        # return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1), None
 
     @staticmethod
     def make_dataset(*args, **kwargs):
         return TSPDataset(*args, **kwargs)
+
+
+class TSP_greedy(TSP):
+    @staticmethod
+    def build_solution(dataset, pi_0):
+        batch_size, graph_size, _ = dataset.size()
+        dist = (dataset.transpose(1,2).repeat_interleave(1, graph_size, 1).transpose(1,2) - dataset.repeat(1, graph_size, 1)).norm(p=2, dim=2).view(1, graph_size, graph_size)
+        M = dist.max()
+        dist = dist + M * torch.eye(graph_size)
+        
+        tour = torch.zeros((batch_size, graph_size))
+        tour[:, 0] = pi_0
+        current_node = pi_0
+        
+        i = 0
+        while i < graph_size:
+            next_node = dist[:, current_node, :].argmin(dim=1)
+            tour[:, i] = next_node
+
+            dist[:, next_node, :], dist[:, :, next_node] = M, M
+            current_node = next_node
+            i += 1
+        
+        # Check that tours are valid, i.e. contain 0 to n -1
+        assert (
+                torch.arange(tour.size(1), out=tour.data.new()).view(1, -1).expand_as(tour) ==
+                tour.data.sort(1)[0]
+        ).all(), "Invalid tour"
+
+        return tour
+
+
+    @staticmethod
+    def get_costs(dataset, pi, log_p):
+        """
+        :param dataset: (batch_size, graph_size, 2) coordinates
+        :param pi: (batch_size, graph_size) permutations representing tours
+        :return: (batch_size) lengths of tours
+        """
+
+        # Check that tours are valid, i.e. contain 0 to n -1
+        assert (
+                torch.arange(pi.size(1), out=pi.data.new()).view(1, -1).expand_as(pi) ==
+                pi.data.sort(1)[0]
+        ).all(), "Invalid tour"
+
+        # Gather dataset in order of tour
+        d = dataset.gather(1, pi.unsqueeze(-1).expand_as(dataset))
+
+        # Length is distance (L2-norm of difference) from each next location from its prev and of last from first
+        return (d[:, 1:] - d[:, :-1]).norm(p=2, dim=2).sum(1) + (d[:, 0] - d[:, -1]).norm(p=2, dim=1), None
 
 
 class TSPDataset(Dataset):
