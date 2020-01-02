@@ -62,18 +62,16 @@ class TSP_greedy(TSP):
                 tour.data.sort(1)[0]
         ).all(), "Invalid tour"
 
-        self.tour = tour
+        tour_one_hot = TSP_greedy.one_hot_solution()
 
-        self.one_hot_solution()
-
-        return tour
+        return tour, tour_one_hot
 
     @staticmethod
-    def one_hot_solution():#self):
-        batch_size, graph_size = self.tour.size()
+    def one_hot_solution(solution):#self):
+        batch_size, graph_size = solution.size()
         tour_one_hot = torch.zeros((batch_size, graph_size, graph_size))
         for i in range(batch_size):
-            tour_one_hot[i, torch.arange(graph_size), self.tour[i]] = 1
+            tour_one_hot[i, torch.arange(graph_size), solution[i]] = 1
         #self.tour_one_hot = tour_one_hot
 
         return tour_one_hot
