@@ -176,8 +176,11 @@ class Decoder(nn.Module):
         sequences = []
         # 0 --> 1 & 1 --> -inf
         # visited = Variable(h.data.new().byte().new(batch_size, graph_size).zero_())  # TOCHECK what does that mean
-        visited = torch.zeros((batch_size, graph_size))
+        visited = torch.zeros((batch_size, graph_size)) #, device=torch.device('cuda'))
         visited = visited.type(torch.bool)
+        is_cuda = next(self.parameters()).is_cuda
+        if is_cuda:
+            visited = visited.cuda()
 
         for time_step in range(graph_size):
 
