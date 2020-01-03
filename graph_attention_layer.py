@@ -189,7 +189,8 @@ class MultiHeadAttention(nn.Module):
         out = torch.matmul(h_p, self.W_O)
 
         # out : (batch_size, graph_size, embed_dim)
-        out = torch.matmul(out.permute(0, 2, 3, 1), torch.ones((batch_size, graph_size, self.n_heads, 1))).view(batch_size, graph_size, self.embed_dim)
+        #out = torch.matmul(out.permute(0, 2, 3, 1), torch.ones((batch_size, graph_size, self.n_heads, 1), device=torch.device('cuda'))).view(batch_size, graph_size, self.embed_dim)
+        out = out.permute(0, 2, 3, 1).sum(dim=3).view(batch_size, graph_size, self.embed_dim)
 
         return out
 
