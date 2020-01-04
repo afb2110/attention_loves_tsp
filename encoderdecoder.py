@@ -14,7 +14,7 @@ from options import get_options
 from baselines import NoBaseline
 from tsp import TSP as problem
 from train import train_epoch, validate
-from graph_attention_layer import AttentionLayer
+from graph_attention_layer import AttentionLayer, MultiHeadAttention, AttentionMechanismVaswani
 from torch.autograd import Variable
 
 from utils import log_values, maybe_cuda_model
@@ -148,8 +148,15 @@ class Decoder(nn.Module):
 
         self.compat_factor = 1 / math.sqrt(key_dim)  # faster than **(-0.5)
 
-        self.W_Q_graph = nn.Parameter(torch.randn((embed_dim, key_dim)))
-        self.W_Q_nodes = nn.Parameter(torch.randn((2 * embed_dim, key_dim)))
+        n_heads_mha = 8
+        embed_dim_mha = 3 * embed_dim
+        self.MHA = MultiHeadAttention(n_heads_mha, embed_dim_mha, embed_dim_mha, AttentionMechanismVaswani,
+                                      params_attention={'n_heads': n_heads_mha,
+                                      'input_dim': embed_dim_mha,
+                                      'key_dim': embed_dim_mha // n_heads,
+                                      'value_dim': embed_dim_mha // n_heads}
+        )
+        self.W_Q = nn.Parameter(torch.randn((3 * embed_dim, key_dim)))
         self.W_K = nn.Parameter(torch.randn((embed_dim, key_dim)))
 
         # Create the placeholder for the first graph embedding
@@ -165,12 +172,9 @@ class Decoder(nn.Module):
     def forward(self, h, h_graph, eval_seq):
 
         batch_size, graph_size, input_dim = h.size()
-        h = h.view(batch_size, 1, graph_size, input_dim)
+        # h = h.view(batch_size, 1, graph_size, input_dim)
 
         h_graph = h_graph.view(batch_size, 1, input_dim)
-        # q_graph : (batch_size, graph_size, key_dim)
-        # Can be calculated outside the loop because constant graph embedding
-        q_graph = torch.matmul(h_graph, self.W_Q_graph)
 
         log_probs = []
         sequences = []
@@ -185,18 +189,28 @@ class Decoder(nn.Module):
         for time_step in range(graph_size):
 
             # Computing compatibilities
-
             h_nodes = self._get_context_nodes(h, sequences)
             # q_nodes : (batch_size, graph_size, key_dim)
-            h_nodes = h_nodes.view(-1, 1, 2 * input_dim)
-            q_nodes = torch.matmul(h_nodes, self.W_Q_nodes)
-            # k : (batch_size, graph_size, key_dim
+            h_nodes = h_nodes.view(batch_size, 1, 2 * input_dim)
+
+            h_c = torch.cat([h_graph, h_nodes], dim=-1).view(batch_size, 1, 3 * input_dim)
+            h_nodes = None  # Need to free memory, otherwise not enough RAM
+
+            # Going through the mha layer
+            h_c = self.MHA(h_c)
+
+            # q_graph : (batch_size, graph_size, key_dim)
+            # Can be calculated outside the loop because constant graph embedding
+            q = torch.matmul(h_c, self.W_Q)
+            # h : (batch_size, graph_size, input_dim)
+            #  W_k : (embed_dim, key_dim)
+            # k : (batch_size, graph_size, key_dim)
             k = torch.matmul(h, self.W_K)
             k = k.squeeze()
-            q = q_graph + q_nodes
 
             # compatibility : (batch_size, graph_size)
             compatibility = self.compat_factor * torch.matmul(q, k.transpose(1, 2))
+            q, k = None, None
             compatibility = compatibility.squeeze()
 
             # From the logits compute the probabilities by clipping
@@ -248,12 +262,13 @@ class Decoder(nn.Module):
         # self.context_node = [embedded_graph[1], torch.dot(self.W_v, embedded_graph[0][initial_node]),
         #                      torch.dot(self.W_v, embedded_graph[0][final_node])]
         if len(sequences) == 0:
+            batch_size = embeddings.size(0)
             # First step, use learned input symbol (placeholder)
             # No need to repeat, by adding dimension broadcasting will work
-            return self.W_placeholder.unsqueeze(0)
+            return self.W_placeholder.unsqueeze(0).expand(batch_size, -1)
         else:
             batch_size = embeddings.size(0)
-            embeddings = embeddings.squeeze()
+            # embeddings = embeddings.squeeze()
             # Return first and last node embeddings
             return torch.gather(
                 embeddings,

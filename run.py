@@ -13,7 +13,6 @@ from baselines import NoBaseline
 from tsp import TSP as problem
 from train import train_epoch, validate
 from encoderdecoder import AttentionModel
-
 from utils import log_values, maybe_cuda_model
 
 
