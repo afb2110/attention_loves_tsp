@@ -59,7 +59,11 @@ if __name__ == "__main__":
 
     # Initialize baseline
     baseline = opts.baseline
-    if not baseline:
+    
+    if opts.baseline == 'rollout':
+        baseline = RolloutBaseline(model, problem, opts)
+    else:
+        assert opts.baseline is None, "Unknown baseline: {}".format(opts.baseline)
         baseline = NoBaseline()
 
     # Initialize optimizer  # TOCHECK
