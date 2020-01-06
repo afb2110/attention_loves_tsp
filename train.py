@@ -101,6 +101,7 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
             batch_id,
             step,
             batch,
+            problem,
             opts
         )
 
@@ -138,6 +139,7 @@ def train_batch(
         batch_id,
         step,
         batch,
+        problem,
         opts
 ):
 
@@ -149,11 +151,12 @@ def train_batch(
     cost, _log_p, pi, mask = model(x)
 
     # Evaluate baseline, get baseline loss if any (only for critic)
-    bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
-    # bl_val, bl_loss = 0, 0
+    #TO SL bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
+    bl_val, bl_loss = 0, 0
 
     # Get log_p corresponding to selected actions
     log_p = _log_p.gather(2, pi.unsqueeze(-1)).squeeze(-1)
+    print(f"\n=== GRAOU ===\n{_log_p.size()}")
 
     # Optional: mask out actions irrelevant to objective so they do not get reinforced
     if mask is not None:
@@ -162,10 +165,13 @@ def train_batch(
     assert (log_p > -1000).data.all(), "Logprobs should not be -inf, check sampling procedure!"
 
     # Calculate loss
-    log_likelihood = log_p.sum(1)
-    reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
-    loss = reinforce_loss + bl_loss
+    #TO SL log_likelihood = log_p.sum(1)
+    #TO SL reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
+    #TO SL loss = reinforce_loss + bl_loss
     # loss = reinforce_loss
+    solution, oh_solution = problem.build_solution(x, pi[0])
+
+    loss = problem.get_loss(x, oh_solution, log_p)
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()

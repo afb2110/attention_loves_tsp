@@ -78,7 +78,7 @@ class TSP_greedy(TSP):
 
 
     @staticmethod
-    def get_costs(pi, log_p):
+    def get_loss(dataset, pi, log_p):
         """
         :param dataset: (batch_size, graph_size, 2) coordinates
         :param pi: (batch_size, graph_size, graph_size) one-hot encoded permutations representing tours
@@ -90,6 +90,8 @@ class TSP_greedy(TSP):
                 torch.arange(pi.size(1), out=pi.data.new()).view(1, -1).expand_as(pi) ==
                 pi.data.sort(1)[0]
         ).all(), "Invalid tour"
+
+        print(pi.size(), log_p.size())
 
         loss = -(pi*log_p).sum(dim=2).sum(dim=1)
         

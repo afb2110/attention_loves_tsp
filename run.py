@@ -10,7 +10,8 @@ from torch import optim
 
 from options import get_options
 from baselines import NoBaseline, RolloutBaseline
-from tsp import TSP as problem
+# from tsp import TSP as problem
+from tsp import TSP_greedy as problem
 from train import train_epoch, validate
 from encoderdecoder import AttentionModel
 
