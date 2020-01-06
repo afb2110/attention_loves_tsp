@@ -156,7 +156,7 @@ def train_batch(
 
     # Get log_p corresponding to selected actions
     log_p = _log_p.gather(2, pi.unsqueeze(-1)).squeeze(-1)
-    print(f"\n=== GRAOU ===\n{_log_p.size()}")
+    # print(f"\n=== GRAOU ===\n{_log_p.size()}\n{pi.size()}")
 
     # Optional: mask out actions irrelevant to objective so they do not get reinforced
     if mask is not None:
@@ -165,13 +165,14 @@ def train_batch(
     assert (log_p > -1000).data.all(), "Logprobs should not be -inf, check sampling procedure!"
 
     # Calculate loss
-    #TO SL log_likelihood = log_p.sum(1)
-    #TO SL reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
+    log_likelihood = log_p.sum(1)
+    reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
     #TO SL loss = reinforce_loss + bl_loss
     # loss = reinforce_loss
-    solution, oh_solution = problem.build_solution(x, pi[0])
+    solution, oh_solution = problem.build_solution(x, pi[:, 0])
 
-    loss = problem.get_loss(x, oh_solution, log_p)
+    loss = problem.get_loss(x, oh_solution, _log_p)
+    # print(f"\n=== LOCO ===\n{loss}")
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()

@@ -39,20 +39,21 @@ class TSP_greedy(TSP):
     @staticmethod
     def build_solution(dataset, pi_0):
         batch_size, graph_size, _ = dataset.size()
-        dist = (dataset.transpose(1,2).repeat_interleave(1, graph_size, 1).transpose(1,2) - dataset.repeat(1, graph_size, 1)).norm(p=2, dim=2).view(1, graph_size, graph_size)
-        M = dist.max()
-        dist = dist + M * torch.eye(graph_size)
+        dist = (dataset.transpose(1,2).repeat_interleave(graph_size, 2).transpose(1,2) - dataset.repeat(1, graph_size, 1)).norm(p=2, dim=2).view(batch_size, graph_size, graph_size)
+        M = dist.max() + 1
+        dist = dist + M * torch.eye(graph_size, device=torch.device('cuda'))
         
         tour = torch.zeros((batch_size, graph_size)).int()
         tour[:, 0] = pi_0
         current_node = pi_0
         
-        i = 0
+        i = 1
         while i < graph_size:
-            next_node = dist[:, current_node, :].argmin(dim=1)
+            next_node = dist[torch.arange(batch_size), current_node, :].argmin(dim=1)
+            # print(next_node)
             tour[:, i] = next_node
 
-            dist[:, next_node, :], dist[:, :, next_node] = M, M
+            dist[torch.arange(batch_size), current_node, :], dist[torch.arange(batch_size), :, current_node] = M, M
             current_node = next_node
             i += 1
         
@@ -62,7 +63,8 @@ class TSP_greedy(TSP):
                 tour.data.sort(1)[0]
         ).all(), "Invalid tour"
 
-        tour_one_hot = TSP_greedy.one_hot_solution()
+        # print(tour)
+        tour_one_hot = TSP_greedy.one_hot_solution(tour)
 
         return tour, tour_one_hot
 
@@ -71,7 +73,8 @@ class TSP_greedy(TSP):
         batch_size, graph_size = solution.size()
         tour_one_hot = torch.zeros((batch_size, graph_size, graph_size))
         for i in range(batch_size):
-            tour_one_hot[i, torch.arange(graph_size), solution[i]] = 1
+            # print(f"\n=== KOPEK ===\n{solution[i]}")
+            tour_one_hot[i, torch.arange(graph_size), solution[i].long()] = 1
         #self.tour_one_hot = tour_one_hot
 
         return tour_one_hot
@@ -86,14 +89,14 @@ class TSP_greedy(TSP):
         """
 
         # Check that tours are valid, i.e. contain 0 to n -1
-        assert (
+        """assert (
                 torch.arange(pi.size(1), out=pi.data.new()).view(1, -1).expand_as(pi) ==
                 pi.data.sort(1)[0]
-        ).all(), "Invalid tour"
+        ).all(), "Invalid tour" """
 
-        print(pi.size(), log_p.size())
-
-        loss = -(pi*log_p).sum(dim=2).sum(dim=1)
+        # print(pi, log_p)
+        log_p[log_p == -float('inf')] = -1000
+        loss = -(pi.to(torch.device('cuda'))*log_p).sum(dim=2).sum(dim=1).sum(dim=0)
         
         return loss
 
