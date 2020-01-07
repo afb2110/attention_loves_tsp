@@ -3,7 +3,7 @@
 import os
 import pprint as pp
 import json
-# from tensorboard_logger import configure
+from tensorboard_logger import configure
 
 import torch
 from torch import optim
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     pp.pprint(vars(opts))
 
     # Set the random seed
-    torch.manual_seed(0)
+    torch.manual_seed(opts.seed)
 
     # Optionally configure tensorboard
     if not opts.no_tensorboard:
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         assert opts.baseline is None, "Unknown baseline: {}".format(opts.baseline)
         baseline = NoBaseline()
 
-    # Initialize optimizer  # TOCHECK
+    # Initialize optimizer
     optimizer = optim.Adam(
         [{'params': model.parameters(), 'lr': float(opts.lr_model)}]
         + (
@@ -90,7 +90,6 @@ if __name__ == "__main__":
             else []
         )
     )
-
 
     # Initialize learning rate scheduler, decay by lr_decay once per epoch!
     lr_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: opts.lr_decay ** epoch)

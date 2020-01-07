@@ -7,7 +7,7 @@ import math
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
-# from tensorboard_logger import log_value
+from tensorboard_logger import log_value
 from utils import log_values
 
 
@@ -45,7 +45,7 @@ def rollout(model, dataset, opts):
     model.eval()
 
     def eval_model_bat(bat):
-        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, requires_grad=True))
+        cost, _, _, _ = model(make_var(bat, opts.use_cuda, requires_grad=True))
         return cost.data.cpu()
 
     return torch.cat([
@@ -106,7 +106,6 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
 
         step += 1
 
-    lr_scheduler.step(epoch)
     epoch_duration = time.time() - start_time
     print("Finished epoch {}, took {} s".format(epoch, time.strftime('%H:%M:%S', time.gmtime(epoch_duration))))
 
@@ -128,6 +127,7 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
         log_value('val_avg_reward', avg_reward, step)
 
     baseline.epoch_callback(model, epoch)
+    lr_scheduler.step(epoch)
 
 
 def train_batch(
@@ -164,7 +164,6 @@ def train_batch(
     log_likelihood = log_p.sum(1)
     reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
     loss = reinforce_loss + bl_loss
-    # loss = reinforce_loss
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
