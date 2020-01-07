@@ -16,6 +16,7 @@ from train import train_epoch, validate
 from encoderdecoder import AttentionModel
 from utils import log_values, maybe_cuda_model
 
+from held_karp import held_karp
 
 if __name__ == "__main__":
     opts = get_options()
