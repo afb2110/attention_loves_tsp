@@ -135,6 +135,7 @@ class AttentionMechanismVelickovic(AttentionMechanism):
 
         compatibility = self.compat_factor * torch.matmul(q, k.transpose(2, 3))
 
+
         if mask is not None:
             # Transform anti-adjacency matrix into a compatibility mask:
             # 0 --> 1 & 1 --> -inf

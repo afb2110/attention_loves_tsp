@@ -1,19 +1,11 @@
 #!/usr/bin/env python
 
-import os
-import json
-import pprint as pp
-
 import math
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import numpy as np
 
-from options import get_options
-from baselines import NoBaseline
-from tsp import TSP as problem
-from train import train_epoch, validate
 from graph_attention_layer import AttentionLayer, MultiHeadAttention, AttentionMechanismVaswani
 from torch.autograd import Variable
 
@@ -197,7 +189,7 @@ class Decoder(nn.Module):
             h_nodes = None  # Need to free memory, otherwise not enough RAM
 
             # Going through the mha layer
-            h_c = self.MHA(h_c)
+            # h_c = self.MHA(h_c)
 
             # q_graph : (batch_size, graph_size, key_dim)
             # Can be calculated outside the loop because constant graph embedding

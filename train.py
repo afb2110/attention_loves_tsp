@@ -7,7 +7,7 @@ import math
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
-from tensorboard_logger import log_value
+# from tensorboard_logger import log_value
 from utils import log_values
 
 
@@ -45,7 +45,7 @@ def rollout(model, dataset, opts):
     model.eval()
 
     def eval_model_bat(bat):
-        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, volatile=True))
+        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, requires_grad=False))
         return cost.data.cpu()
 
     return torch.cat([
@@ -64,7 +64,7 @@ def clip_grad_norms(param_groups, max_norm=math.inf):
     :return: grad_norms, clipped_grad_norms: list with (clipped) gradient norms per group
     """
     grad_norms = [
-        torch.nn.utils.clip_grad_norm(
+        torch.nn.utils.clip_grad_norm_(
             group['params'],
             max_norm if max_norm > 0 else math.inf,  # Inf so no clipping but still call to calc
             norm_type=2
@@ -150,7 +150,6 @@ def train_batch(
 
     # Evaluate baseline, get baseline loss if any (only for critic)
     bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
-    # bl_val, bl_loss = 0, 0
 
     # Get log_p corresponding to selected actions
     log_p = _log_p.gather(2, pi.unsqueeze(-1)).squeeze(-1)

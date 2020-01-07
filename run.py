@@ -3,13 +3,13 @@
 import os
 import pprint as pp
 import json
-from tensorboard_logger import configure
+# from tensorboard_logger import configure
 
 import torch
 from torch import optim
 
 from options import get_options
-from baselines import NoBaseline
+from baselines import NoBaseline, RolloutBaseline, GreedyBaseline
 from tsp import TSP as problem
 from train import train_epoch, validate
 from encoderdecoder import AttentionModel
