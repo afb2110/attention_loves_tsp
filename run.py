@@ -97,6 +97,15 @@ if __name__ == "__main__":
     # Start the actual training loop
     val_dataset = problem.make_dataset(size=opts.graph_size, num_samples=opts.val_size)
 
+    val_dataset_tensor = torch.stack(val_dataset.data)
+    dist = (val_dataset_tensor.transpose(1, 2).repeat_interleave(opts.graph_size, 2).transpose(1, 2).float() -
+            val_dataset_tensor.repeat(1, opts.graph_size, 1).float()).norm(p=2, dim=2).view(opts.val_size,
+                                                                                    opts.graph_size, opts.graph_size)
+    DP_val_solution = [held_karp(dist[i])[0] for i in range(opts.val_size)]
+    DP_val_solution = torch.tensor(DP_val_solution)
+    DP_val_solution = DP_val_solution.mean()
+    problem.DP_cost = DP_val_solution
+
     if opts.eval_only:
         validate(model, val_dataset, opts)
     else:
