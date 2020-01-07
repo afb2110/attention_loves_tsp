@@ -45,7 +45,7 @@ def rollout(model, dataset, opts):
     model.eval()
 
     def eval_model_bat(bat):
-        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, requires_grad=False))
+        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, requires_grad=True))
         return cost.data.cpu()
 
     return torch.cat([

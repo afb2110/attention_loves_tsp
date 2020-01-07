@@ -87,7 +87,7 @@ class RolloutBaseline(Baseline):
 
         if dataset is None:
             self.dataset = self.problem.make_dataset(
-                size=self.opts.graph_size, num_samples=self.opts.val_size, distribution=self.opts.data_distribution)
+                size=self.opts.graph_size, num_samples=self.opts.val_size)
         else:
             self.dataset = dataset
         print("Evaluating baseline model on evaluation dataset")
@@ -148,6 +148,36 @@ class RolloutBaseline(Baseline):
         load_model = copy.deepcopy(self.model)
         get_inner_model(load_model).load_state_dict(get_inner_model(state_dict['model']).state_dict())
         self._update_model(load_model, state_dict['epoch'], state_dict['dataset'])
+
+
+class CriticBaseline(Baseline):
+
+    def __init__(self, critic):
+        super(Baseline, self).__init__()
+
+        self.critic = critic
+
+    def eval(self, x, c):
+        v = self.critic(x)
+        # Detach v since actor should not backprop through baseline, only for loss
+        return v.detach(), F.mse_loss(v, c.detach())
+
+    def get_learnable_parameters(self):
+        return list(self.critic.parameters())
+
+    def epoch_callback(self, model, epoch):
+        pass
+
+    def state_dict(self):
+        return {
+            'critic': self.critic.state_dict()
+        }
+
+    def load_state_dict(self, state_dict):
+        critic_state_dict = state_dict.get('critic', {})
+        if not isinstance(critic_state_dict, dict):  # backwards compatibility
+            critic_state_dict = critic_state_dict.state_dict()
+        self.critic.load_state_dict({**self.critic.state_dict(), **critic_state_dict})
 
 
 class BaselineDataset(Dataset):
