@@ -8,8 +8,9 @@ from tensorboard_logger import configure
 import torch
 from torch import optim
 
+from critic_network import CriticNetwork
 from options import get_options
-from baselines import NoBaseline, RolloutBaseline
+from baselines import NoBaseline, RolloutBaseline, CriticBaseline
 from tsp import TSP as problem
 from train import train_epoch, validate
 from encoderdecoder import AttentionModel
@@ -63,6 +64,20 @@ if __name__ == "__main__":
     
     if opts.baseline == 'rollout':
         baseline = RolloutBaseline(model, problem, opts)
+    elif opts.baseline == 'critic':
+        assert problem.NAME == 'tsp', "Critic only supported for TSP"
+        baseline = CriticBaseline(
+            maybe_cuda_model(
+                CriticNetwork(
+                    problem.NODE_DIM,
+                    opts.embedding_dim,
+                    opts.hidden_dim,
+                    opts.n_encode_layers,
+                    opts.normalization
+                ),
+                opts.use_cuda
+            )
+        )
     else:
         assert opts.baseline is None, "Unknown baseline: {}".format(opts.baseline)
         baseline = NoBaseline()
