@@ -41,7 +41,7 @@ def get_options(args=None):
     parser.add_argument('--exp_beta', type=float, default=0.8,
                         help='Exponential moving average baseline decay (default 0.8)')
     parser.add_argument('--baseline', default=None,
-                        help="Baseline to use: 'rollout', 'critic' or 'exponential'. Defaults to no baseline.")
+                        help="Baseline to use: 'rollout', 'critic' or 'oracle'. Defaults to no baseline.")
     parser.add_argument('--bl_alpha', type=float, default=0.05,
                         help='Significance in the t-test for updating rollout baseline')
     parser.add_argument('--bl_warmup_epochs', type=int, default=None,

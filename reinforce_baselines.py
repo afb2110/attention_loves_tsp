@@ -2,8 +2,10 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 from scipy.stats import ttest_rel
+from scipy.spatial import distance_matrix
 import copy
 from train import rollout, get_inner_model
+from tsp.held_karp import held_karp
 
 class Baseline(object):
 
@@ -150,6 +152,13 @@ class RolloutBaseline(Baseline):
         load_model = copy.deepcopy(self.model)
         get_inner_model(load_model).load_state_dict(get_inner_model(state_dict['model']).state_dict())
         self._update_model(load_model, state_dict['epoch'], state_dict['dataset'])
+
+
+class OracleBaseline(Baseline):
+
+    def eval(self, x, c):
+        val = sum([held_karp(distance_matrix(graph.cpu(), graph.cpu()))[0] for graph in x])/x.size(0)
+        return val, 0
 
 
 class BaselineDataset(Dataset):
