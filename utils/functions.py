@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 
 def load_problem(name):
-    from problems import TSP
+    from tsp.problem_tsp import TSP
     problem = {
         'tsp': TSP
     }.get(name, None)
