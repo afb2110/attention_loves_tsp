@@ -16,12 +16,13 @@ class CriticNetwork(nn.Module):
 
         self.hidden_dim = hidden_dim
 
+        self.init_embed = nn.Linear(input_dim, embedding_dim)
         self.encoder = Encoder(
-            n_heads=n_heads,
+            n_heads=8,
             embed_dim=embedding_dim,
-            n_layers=self.n_encode_layers,
-            node_dim=None,
-            normalization='batch',
+            n_layers=n_layers,
+            node_dim=input_dim,
+            normalization=encoder_normalization,
             feed_forward_hidden=512)
 
         self.value_head = nn.Sequential(
@@ -36,5 +37,5 @@ class CriticNetwork(nn.Module):
         :param inputs: (batch_size, graph_size, input_dim)
         :return:
         """
-        _, graph_embeddings = self.encoder(inputs)
+        _, graph_embeddings = self.encoder(self.init_embed(inputs))
         return self.value_head(graph_embeddings)
