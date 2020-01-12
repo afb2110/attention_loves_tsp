@@ -28,6 +28,7 @@ class Decoder(nn.Module):
         self.n_heads = n_heads
         self.embedding_dim = embedding_dim
         self.shrink_size = shrink_size
+        
         step_context_dim = 2 * embedding_dim  # Embedding of first and last node
         node_dim = 2  # x, y
 

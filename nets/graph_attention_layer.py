@@ -48,13 +48,6 @@ class AttentionMechanismVaswani(AttentionMechanism):
         self.W_V = nn.Parameter(torch.randn((n_heads, input_dim, value_dim)))
 
 
-    def initialize_params(self, init_function):
-        """Initialization."""
-        init_function(self.W_Q)
-        init_function(self.W_K)
-        init_function(self.W_V)
-
-
     def forward(self, h, mask=None):
         """
         h (batch_size, graph_size, input_dim)

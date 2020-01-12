@@ -43,93 +43,6 @@ def solve_gurobi(directory, name, loc, disable_cache=False, timeout=None, gap=No
         return None
 
 
-def solve_concorde_log(executable, directory, name, loc, disable_cache=False):
-
-    problem_filename = os.path.join(directory, "{}.tsp".format(name))
-    tour_filename = os.path.join(directory, "{}.tour".format(name))
-    output_filename = os.path.join(directory, "{}.concorde.pkl".format(name))
-    log_filename = os.path.join(directory, "{}.log".format(name))
-
-    # if True:
-    try:
-        # May have already been run
-        if os.path.isfile(output_filename) and not disable_cache:
-            tour, duration = load_dataset(output_filename)
-        else:
-            write_tsplib(problem_filename, loc, name=name)
-
-            with open(log_filename, 'w') as f:
-                start = time.time()
-                try:
-                    # Concorde is weird, will leave traces of solution in current directory so call from target dir
-                    check_call([executable, '-s', '1234', '-x', '-o',
-                                os.path.abspath(tour_filename), os.path.abspath(problem_filename)],
-                               stdout=f, stderr=f, cwd=directory)
-                except CalledProcessError as e:
-                    # Somehow Concorde returns 255
-                    assert e.returncode == 255
-                duration = time.time() - start
-
-            tour = read_concorde_tour(tour_filename)
-            save_dataset((tour, duration), output_filename)
-
-        return calc_tsp_length(loc, tour), tour, duration
-
-    except Exception as e:
-        print("Exception occured")
-        print(e)
-        return None
-
-
-def solve_lkh_log(executable, directory, name, loc, runs=1, disable_cache=False):
-
-    problem_filename = os.path.join(directory, "{}.lkh{}.vrp".format(name, runs))
-    tour_filename = os.path.join(directory, "{}.lkh{}.tour".format(name, runs))
-    output_filename = os.path.join(directory, "{}.lkh{}.pkl".format(name, runs))
-    param_filename = os.path.join(directory, "{}.lkh{}.par".format(name, runs))
-    log_filename = os.path.join(directory, "{}.lkh{}.log".format(name, runs))
-
-    try:
-        # May have already been run
-        if os.path.isfile(output_filename) and not disable_cache:
-            tour, duration = load_dataset(output_filename)
-        else:
-            write_tsplib(problem_filename, loc, name=name)
-
-            params = {"PROBLEM_FILE": problem_filename, "OUTPUT_TOUR_FILE": tour_filename, "RUNS": runs, "SEED": 1234}
-            write_lkh_par(param_filename, params)
-
-            with open(log_filename, 'w') as f:
-                start = time.time()
-                check_call([executable, param_filename], stdout=f, stderr=f)
-                duration = time.time() - start
-
-            tour = read_tsplib(tour_filename)
-            save_dataset((tour, duration), output_filename)
-
-        return calc_tsp_length(loc, tour), tour, duration
-
-    except Exception as e:
-        print("Exception occured")
-        print(e)
-        return None
-
-
-def write_lkh_par(filename, parameters):
-    default_parameters = {  # Use none to include as flag instead of kv
-        "MAX_TRIALS": 10000,
-        "RUNS": 10,
-        "TRACE_LEVEL": 1,
-        "SEED": 0
-    }
-    with open(filename, 'w') as f:
-        for k, v in {**default_parameters, **parameters}.items():
-            if v is None:
-                f.write("{}\n".format(k))
-            else:
-                f.write("{} = {}\n".format(k, v))
-
-
 def write_tsplib(filename, loc, name="problem"):
 
     with open(filename, 'w') as f:
@@ -150,19 +63,6 @@ def write_tsplib(filename, loc, name="problem"):
         ]))
         f.write("\n")
         f.write("EOF\n")
-
-
-def read_concorde_tour(filename):
-    with open(filename, 'r') as f:
-        n = None
-        tour = []
-        for line in f:
-            if n is None:
-                n = int(line)
-            else:
-                tour.extend([int(node) for node in line.rstrip().split(" ")])
-    assert len(tour) == n, "Unexpected tour length"
-    return tour
 
 
 def read_tsplib(filename):

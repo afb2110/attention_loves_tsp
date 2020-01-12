@@ -71,7 +71,6 @@ class AttentionModel(nn.Module):
         self.checkpoint_encoder = checkpoint_encoder
         self.shrink_size = shrink_size
 
-        step_context_dim = 2 * embedding_dim  # Embedding of first and last node
         node_dim = 2  # x, y
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
