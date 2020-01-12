@@ -4,18 +4,13 @@ from tqdm import tqdm
 import torch
 import math
 
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
-# from tensorboard_logger import log_value
-from utils import log_values
 
+from nets.attention_model import set_decode_type
+from utils.log_utils import log_values
+from utils import move_to
 
-
-def set_decode_type(model, decode_type):
-    if isinstance(model, DataParallel):
-        model = model.module
-    model.set_decode_type(decode_type)
 
 def get_inner_model(model):
     return model.module if isinstance(model, DataParallel) else model
@@ -32,20 +27,14 @@ def validate(model, dataset, opts):
     return avg_cost
 
 
-def make_var(val, cuda=False, **kwargs):
-    var = Variable(val, **kwargs)
-    if cuda:
-        var = var.cuda()
-    return var
-
-
 def rollout(model, dataset, opts):
     # Put in greedy evaluation mode!
     set_decode_type(model, "greedy")
     model.eval()
 
     def eval_model_bat(bat):
-        cost, log_p, pi, _ = model(make_var(bat, opts.use_cuda, requires_grad=True))
+        with torch.no_grad():
+            cost, _ = model(move_to(bat, opts.device))
         return cost.data.cpu()
 
     return torch.cat([
@@ -75,16 +64,17 @@ def clip_grad_norms(param_groups, max_norm=math.inf):
     return grad_norms, grad_norms_clipped
 
 
-def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, opts):
+def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, tb_logger, opts):
     print("Start train epoch {}, lr={} for run {}".format(epoch, optimizer.param_groups[0]['lr'], opts.run_name))
     step = epoch * (opts.epoch_size // opts.batch_size)
     start_time = time.time()
 
     if not opts.no_tensorboard:
-        log_value('learnrate_pg0', optimizer.param_groups[0]['lr'], step)
+        tb_logger.log_value('learnrate_pg0', optimizer.param_groups[0]['lr'], step)
 
     # Generate new training data for each epoch
-    training_dataset = baseline.wrap_dataset(problem.make_dataset(size=opts.graph_size, num_samples=opts.epoch_size))
+    training_dataset = baseline.wrap_dataset(problem.make_dataset(
+        size=opts.graph_size, num_samples=opts.epoch_size, distribution=opts.data_distribution))
     training_dataloader = DataLoader(training_dataset, batch_size=opts.batch_size, num_workers=1)
 
     # Put model in train mode!
@@ -101,33 +91,37 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
             batch_id,
             step,
             batch,
+            tb_logger,
             opts
         )
 
         step += 1
 
-    lr_scheduler.step(epoch)
     epoch_duration = time.time() - start_time
     print("Finished epoch {}, took {} s".format(epoch, time.strftime('%H:%M:%S', time.gmtime(epoch_duration))))
 
-    print('Saving model and state...')
-    torch.save(
-        {
-            'model': get_inner_model(model).state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'rng_state': torch.get_rng_state(),
-            'cuda_rng_state': torch.cuda.get_rng_state_all(),
-            'baseline': baseline.state_dict()
-        },
-        os.path.join(opts.save_dir, 'epoch-{}.pt'.format(epoch))
-    )
+    if (opts.checkpoint_epochs != 0 and epoch % opts.checkpoint_epochs == 0) or epoch == opts.n_epochs - 1:
+        print('Saving model and state...')
+        torch.save(
+            {
+                'model': get_inner_model(model).state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'rng_state': torch.get_rng_state(),
+                'cuda_rng_state': torch.cuda.get_rng_state_all(),
+                'baseline': baseline.state_dict()
+            },
+            os.path.join(opts.save_dir, 'epoch-{}.pt'.format(epoch))
+        )
 
     avg_reward = validate(model, val_dataset, opts)
 
     if not opts.no_tensorboard:
-        log_value('val_avg_reward', avg_reward, step)
+        tb_logger.log_value('val_avg_reward', avg_reward, step)
 
     baseline.epoch_callback(model, epoch)
+
+    # lr_scheduler should be called at end of epoch
+    lr_scheduler.step()
 
 
 def train_batch(
@@ -138,33 +132,22 @@ def train_batch(
         batch_id,
         step,
         batch,
+        tb_logger,
         opts
 ):
-
     x, bl_val = baseline.unwrap_batch(batch)
-    x = make_var(x, opts.use_cuda)
-    bl_val = make_var(bl_val, opts.use_cuda) if bl_val is not None else None
+    x = move_to(x, opts.device)
+    bl_val = move_to(bl_val, opts.device) if bl_val is not None else None
 
     # Evaluate model, get costs and log probabilities
-    cost, _log_p, pi, mask = model(x)
+    cost, log_likelihood = model(x)
 
     # Evaluate baseline, get baseline loss if any (only for critic)
     bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
 
-    # Get log_p corresponding to selected actions
-    log_p = _log_p.gather(2, pi.unsqueeze(-1)).squeeze(-1)
-
-    # Optional: mask out actions irrelevant to objective so they do not get reinforced
-    if mask is not None:
-        log_p[mask] = 0
-
-    assert (log_p > -1000).data.all(), "Logprobs should not be -inf, check sampling procedure!"
-
     # Calculate loss
-    log_likelihood = log_p.sum(1)
     reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
     loss = reinforce_loss + bl_loss
-    # loss = reinforce_loss
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
@@ -176,4 +159,4 @@ def train_batch(
     # Logging
     if step % int(opts.log_step) == 0:
         log_values(cost, grad_norms, epoch, batch_id, step,
-                   log_likelihood, reinforce_loss, bl_loss, opts)
+                   log_likelihood, reinforce_loss, bl_loss, tb_logger, opts)

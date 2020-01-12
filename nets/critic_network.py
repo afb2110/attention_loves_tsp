@@ -1,5 +1,5 @@
 from torch import nn
-from encoderdecoder import Encoder
+from nets.graph_encoder import Encoder
 
 
 class CriticNetwork(nn.Module):
@@ -17,12 +17,12 @@ class CriticNetwork(nn.Module):
         self.hidden_dim = hidden_dim
 
         self.encoder = Encoder(
-            node_dim=input_dim,
-            n_heads=8,
+            n_heads=n_heads,
             embed_dim=embedding_dim,
-            n_layers=n_layers,
-            normalization=encoder_normalization
-        )
+            n_layers=self.n_encode_layers,
+            node_dim=None,
+            normalization='batch',
+            feed_forward_hidden=512)
 
         self.value_head = nn.Sequential(
             nn.Linear(embedding_dim, hidden_dim),
@@ -32,6 +32,7 @@ class CriticNetwork(nn.Module):
 
     def forward(self, inputs):
         """
+
         :param inputs: (batch_size, graph_size, input_dim)
         :return:
         """
