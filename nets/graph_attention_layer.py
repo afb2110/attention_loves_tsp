@@ -171,7 +171,6 @@ class MultiHeadAttention(nn.Module):
         for param in self.parameters():
             nn.init.xavier_uniform_(param)
 
-        self.attention_mechanism.initialize_params(nn.init.xavier_uniform_)
 
     def forward(self, h, mask=None):
         batch_size, graph_size, _ = h.size()
