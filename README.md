@@ -1,20 +1,7 @@
 # Attention, Learn to Solve Routing Problems!
 
-Attention based model for learning to solve the Travelling Salesman Problem (TSP) and the Vehicle Routing Problem (VRP), Orienteering Problem (OP) and (Stochastic) Prize Collecting TSP (PCTSP). Training with REINFORCE with greedy rollout baseline.
+Attention based model for learning to solve the Travelling Salesman Problem (TSP) and the Vehicle Routing Problem (VRP), Orienteering Problem (OP) and (Stochastic) Prize Collecting TSP (PCTSP). Training with REINFORCE with greedy rollout baseline. Our work is based on Wouter Kool's paper [Attention, Learn to Solve Routing Problems!](https://openreview.net/forum?id=ByxBFsRqYm) which has been accepted at [ICLR 2019](https://iclr.cc/Conferences/2019) and is based on his code. We implemented Encoder and the decoder, and added a few new options such as the oracle baseline.
 
-## Paper
-For more details, please see our paper [Attention, Learn to Solve Routing Problems!](https://openreview.net/forum?id=ByxBFsRqYm) which has been accepted at [ICLR 2019](https://iclr.cc/Conferences/2019). If this code is useful for your work, please cite our paper:
-
-```
-@inproceedings{
-    kool2018attention,
-    title={Attention, Learn to Solve Routing Problems!},
-    author={Wouter Kool and Herke van Hoof and Max Welling},
-    booktitle={International Conference on Learning Representations},
-    year={2019},
-    url={https://openreview.net/forum?id=ByxBFsRqYm},
-}
-``` 
 
 ## Dependencies
 
